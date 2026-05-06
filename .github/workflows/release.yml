@@ -1,0 +1,151 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Package
+    runs-on: ubuntu-latest
+
+    env:
+      VERSION: ${{ github.ref_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y rpm fakeroot zip
+
+      - name: Strip v prefix from version
+        run: echo "PKG_VERSION=${VERSION#v}" >> $GITHUB_ENV
+
+      - name: Build binaries
+        run: |
+          mkdir -p dist
+
+          GOOS=linux  GOARCH=amd64 go build -ldflags="-s -w" -o dist/cfdns-linux-amd64   .
+          GOOS=linux  GOARCH=arm64 go build -ldflags="-s -w" -o dist/cfdns-linux-arm64   .
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/cfdns-darwin-amd64  .
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/cfdns-darwin-arm64  .
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/cfdns-windows-amd64.exe .
+
+      - name: Create .deb package (apt)
+        run: |
+          PKG="cfdns_${PKG_VERSION}_amd64"
+          mkdir -p "pkg-deb/${PKG}/DEBIAN"
+          mkdir -p "pkg-deb/${PKG}/usr/local/bin"
+
+          cp dist/cfdns-linux-amd64 "pkg-deb/${PKG}/usr/local/bin/cfdns"
+          chmod 755 "pkg-deb/${PKG}/usr/local/bin/cfdns"
+
+          cat > "pkg-deb/${PKG}/DEBIAN/control" <<CTRL
+          Package: cfdns
+          Version: ${PKG_VERSION}
+          Architecture: amd64
+          Maintainer: Brian Tafoya <btafoya@briantafoya.com>
+          Description: Cloudflare DNS management CLI
+           Manage Cloudflare DNS records from the command line.
+          CTRL
+
+          fakeroot dpkg-deb --build "pkg-deb/${PKG}" "dist/cfdns_${PKG_VERSION}_amd64.deb"
+
+      - name: Create .rpm package
+        run: |
+          mkdir -p ~/rpmbuild/{SPECS,SOURCES,BUILD,RPMS,SRPMS}
+          cp dist/cfdns-linux-amd64 ~/rpmbuild/BUILD/cfdns
+
+          cat > ~/rpmbuild/SPECS/cfdns.spec <<SPEC
+          Name:           cfdns
+          Version:        ${PKG_VERSION}
+          Release:        1%{?dist}
+          Summary:        Cloudflare DNS management CLI
+          License:        MIT
+          BuildArch:      x86_64
+
+          %description
+          Manage Cloudflare DNS records from the command line.
+
+          %install
+          mkdir -p %{buildroot}/usr/local/bin
+          install -m 755 %{_builddir}/cfdns %{buildroot}/usr/local/bin/cfdns
+
+          %files
+          /usr/local/bin/cfdns
+          SPEC
+
+          rpmbuild -bb ~/rpmbuild/SPECS/cfdns.spec
+          cp ~/rpmbuild/RPMS/x86_64/cfdns-${PKG_VERSION}-1.x86_64.rpm dist/
+
+      - name: Create AppImage
+        run: |
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage \
+            -O /tmp/appimagetool
+          chmod +x /tmp/appimagetool
+
+          mkdir -p AppDir/usr/bin
+          cp dist/cfdns-linux-amd64 AppDir/usr/bin/cfdns
+          chmod 755 AppDir/usr/bin/cfdns
+
+          cat > AppDir/cfdns.desktop <<DESKTOP
+          [Desktop Entry]
+          Name=cfdns
+          Exec=cfdns
+          Icon=cfdns
+          Type=Application
+          Categories=Utility;
+          DESKTOP
+
+          # Minimal 1x1 PNG icon (required by appimagetool)
+          printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82' \
+            > AppDir/cfdns.png
+
+          cat > AppDir/AppRun <<'APPRUN'
+          #!/bin/sh
+          exec "$(dirname "$0")/usr/bin/cfdns" "$@"
+          APPRUN
+          chmod +x AppDir/AppRun
+
+          ARCH=x86_64 /tmp/appimagetool AppDir "dist/cfdns-${PKG_VERSION}-x86_64.AppImage" 2>/dev/null || true
+
+      - name: Create archives
+        run: |
+          tar -czf "dist/cfdns-${PKG_VERSION}-linux-amd64.tar.gz"   -C dist cfdns-linux-amd64
+          tar -czf "dist/cfdns-${PKG_VERSION}-linux-arm64.tar.gz"   -C dist cfdns-linux-arm64
+          tar -czf "dist/cfdns-${PKG_VERSION}-darwin-amd64.tar.gz"  -C dist cfdns-darwin-amd64
+          tar -czf "dist/cfdns-${PKG_VERSION}-darwin-arm64.tar.gz"  -C dist cfdns-darwin-arm64
+          cd dist && zip "cfdns-${PKG_VERSION}-windows-amd64.zip" cfdns-windows-amd64.exe
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum *.deb *.rpm *.AppImage *.tar.gz *.zip > checksums.txt 2>/dev/null || \
+          sha256sum *.deb *.rpm *.tar.gz *.zip > checksums.txt 2>/dev/null || \
+          sha256sum *.tar.gz *.zip > checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: cfdns ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+          files: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.AppImage
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt

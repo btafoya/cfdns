@@ -27,6 +27,45 @@ A fast, simple CLI for managing Cloudflare DNS records. Create, update, delete, 
 
 ## Install
 
+Download the latest release from [GitHub Releases](https://github.com/btafoya/cfdns/releases/latest).
+
+### Linux — apt (Debian/Ubuntu)
+
+```bash
+wget https://github.com/btafoya/cfdns/releases/latest/download/cfdns_<version>_amd64.deb
+sudo dpkg -i cfdns_<version>_amd64.deb
+```
+
+### Linux — rpm (Fedora/RHEL/CentOS)
+
+```bash
+sudo rpm -i https://github.com/btafoya/cfdns/releases/latest/download/cfdns-<version>-1.x86_64.rpm
+```
+
+### Linux — AppImage
+
+```bash
+wget https://github.com/btafoya/cfdns/releases/latest/download/cfdns-<version>-x86_64.AppImage
+chmod +x cfdns-<version>-x86_64.AppImage
+./cfdns-<version>-x86_64.AppImage
+```
+
+### macOS
+
+```bash
+# Apple Silicon (M1/M2/M3)
+curl -L https://github.com/btafoya/cfdns/releases/latest/download/cfdns-<version>-darwin-arm64.tar.gz | tar -xz
+sudo mv cfdns-darwin-arm64 /usr/local/bin/cfdns
+
+# Intel
+curl -L https://github.com/btafoya/cfdns/releases/latest/download/cfdns-<version>-darwin-amd64.tar.gz | tar -xz
+sudo mv cfdns-darwin-amd64 /usr/local/bin/cfdns
+```
+
+### Windows
+
+Download `cfdns-<version>-windows-amd64.zip` from [releases](https://github.com/btafoya/cfdns/releases/latest), extract, and add the directory to your `PATH`.
+
 ### go install
 
 ```bash
