@@ -1,3 +1,5 @@
 .remember/
 .env
 cfdns
+.gstack/
+REDDIT.md
