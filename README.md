@@ -33,6 +33,12 @@ A fast, simple CLI for managing Cloudflare DNS records. Create, update, delete, 
 go install github.com/btafoya/cfdns@latest
 ```
 
+Make sure `$GOPATH/bin` is in your `$PATH`:
+
+```bash
+export PATH="$(go env GOPATH)/bin:$PATH"
+```
+
 ### Build from source
 
 ```bash
